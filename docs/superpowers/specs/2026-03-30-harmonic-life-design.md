@@ -28,11 +28,17 @@ Zustand store updated with next grid + conductor state
 
 ```typescript
 type Cell = {
-  note: number;    // MIDI note number (0-127)
+  note: number;    // MIDI note as float (integer part = semitone, fractional = pitch gravity drift)
   energy: number;  // 0-1, maps to volume
   age: number;     // ticks alive
 }
 ```
+
+For harmony calculations and audio playback, `Math.round(cell.note)` is used. The fractional component accumulates pitch gravity drift between semitones.
+
+**Initial energy values:**
+- User-placed cells: `PLACED_ENERGY` (default 1.0)
+- Born cells: `BIRTH_ENERGY` (default 0.7)
 
 Grid is a flat array of `Cell | null`, size `GRID_SIZE x GRID_SIZE` (default 48x48). Neighbor lookups use Moore neighborhood (8 surrounding cells).
 
@@ -40,20 +46,39 @@ Grid is a flat array of `Cell | null`, size `GRID_SIZE x GRID_SIZE` (default 48x
 
 ### Survival
 
-Each living cell scores harmonic support from living neighbors:
+Each living cell scores harmonic support from living neighbors. The interval between two cells is `abs(noteA - noteB) % 12`. Each neighbor contributes a score based on the interval:
 
-- **Consonant intervals** (positive score): unison, octave, perfect fifth, major third, minor third, perfect fourth
-- **Dissonant intervals** (negative score): minor 2nd, major 7th, tritone
+| Interval (semitones) | Name | Score |
+|---|---|---|
+| 0 | Unison | +1.0 |
+| 7 | Perfect fifth | +0.8 |
+| 5 | Perfect fourth | +0.6 |
+| 4 | Major third | +0.5 |
+| 3 | Minor third | +0.4 |
+| 9 | Major sixth | +0.3 |
+| 2 | Major 2nd | 0.0 |
+| 10 | Minor 7th | -0.2 |
+| 6 | Tritone | -0.5 |
+| 1 | Minor 2nd | -0.6 |
+| 11 | Major 7th | -0.6 |
 
-Cell survives if `harmonicScore >= CONSONANCE_THRESHOLD`. The conductor adjusts this threshold for density management.
+Scores are **summed** across all living neighbors. Cell survives if `harmonicScore >= CONSONANCE_THRESHOLD` (default 0.5). The conductor adjusts this threshold for density management. All score values are tunable.
 
 ### Birth
 
-A dead cell with 2+ living neighbors may be born. The birth note is chosen as the pitch (from the current key/scale) that best completes a chord implied by the neighbors. If no good chord completion exists, no birth occurs.
+A dead cell with 2+ living neighbors may be born. The birth note is chosen by chord completion:
+
+1. Collect the pitch classes (mod 12) of living neighbors.
+2. Match against a set of recognized chord templates (triads only for v1): major `[0,4,7]`, minor `[0,3,7]`, diminished `[0,3,6]`, augmented `[0,4,8]`, sus2 `[0,2,7]`, sus4 `[0,5,7]`. Templates are matched in any rotation/inversion.
+3. For each template that partially matches the neighbor pitch classes (2 of 3 notes present), the missing note is a candidate.
+4. Candidates are filtered to the current conductor key/scale. If multiple remain, prefer the one with the highest harmonic score against the neighbors. If none remain, no birth occurs.
+5. The born cell's octave is set to the average octave of its living neighbors (rounded to nearest MIDI note in the chosen pitch class).
+
+Initial energy of a born cell: `BIRTH_ENERGY` (default 0.7).
 
 ### Pitch Gravity
 
-Each tick, a living cell's note drifts toward the weighted average pitch class of its consonant neighbors. Drift rate controlled by `PITCH_GRAVITY_STRENGTH` (default 0.1). Creates emergent key centers as clusters "agree" on a tonal center.
+Pitch gravity operates on the full MIDI note (not just pitch class). Each tick, compute the weighted average MIDI note of consonant neighbors (weighted by their harmonic score). The cell's internal note is stored as a float. Each tick: `note += (target - note) * PITCH_GRAVITY_STRENGTH`. The note is rounded to the nearest integer for audio playback and harmony calculations. Drift is constrained to the current scale — if rounding would produce an out-of-scale note, snap to the nearest in-scale note instead. Creates emergent key centers as clusters "agree" on a tonal center.
 
 ### Energy Dynamics
 
@@ -72,15 +97,20 @@ Reads aggregate grid state each tick, outputs biases. Never directly mutates cel
 
 ### Global Energy Curve
 
-Arc shape (rise → plateau → fall) over `ARC_DURATION_TICKS` (default 200). Multiplies all cell energy. The piece concludes naturally when the curve decays to zero.
+Arc shape over `ARC_DURATION_TICKS` (default 200), defined as three phases:
+- **Rise** (0–20% of ticks): sine ease-in from 0 to 1.0
+- **Plateau** (20–70% of ticks): holds at 1.0
+- **Fall** (70–100% of ticks): exponential decay from 1.0 toward 0, formula: `e^(-5 * t)` where t is 0→1 over the fall phase
+
+The curve multiplier is applied **after** energy decay and consonance restore: `cell.energy = min(1, (cell.energy - decay + restore)) * curveMultiplier`. When the curve multiplier reaches < 0.01, all remaining cells die simultaneously and the piece ends.
 
 ### Key Tracking
 
-Tracks the dominant pitch class on the grid (most common note mod 12). Biases new births toward this key. With probability `KEY_CHANGE_PROBABILITY` (0.005) per tick, shifts the key — cells gradually re-harmonize through normal pitch gravity.
+Tracks the dominant pitch class on the grid (most common note mod 12). Biases new births toward this key. With probability `KEY_CHANGE_PROBABILITY` (0.005) per tick, shifts the key — cells gradually re-harmonize through normal pitch gravity. A key change does NOT reset the chord progression — the progression continues in the new key.
 
 ### Chord Progression
 
-Follows a loose progression (default: I → IV → V → I). Advances when grid tension resolves (measured by ratio of consonant to dissonant intervals), not on a fixed timer. Biases which birth notes are favored during each phase.
+Follows a loose progression (default: I → IV → V → I). Advances when grid tension resolves — specifically, when the ratio of total positive harmonic scores to total negative harmonic scores exceeds 3:1 for at least 5 consecutive ticks. Not on a fixed timer. Biases which birth notes are favored: birth candidates that belong to the current chord degree are scored 2x higher. The chord progression is subordinate to key tracking — birth notes must be in the current key, and the progression biases within that constraint.
 
 ### Density Management
 
@@ -124,7 +154,7 @@ Each tick, collect all living cells that should play this tick (based on energy-
 ### During Playback
 
 - Drop seed clusters of new notes
-- Place silence bombs to clear regions
+- Place silence bombs to clear regions (radius: 3 cells, instant death — killed cells cannot be reborn for 3 ticks)
 - Shift root key manually (force modulation)
 - Adjust consonance strictness slider
 - Pause / resume
@@ -184,6 +214,8 @@ export const CONFIG = {
   CONSONANCE_THRESHOLD: 0.5,
   PITCH_GRAVITY_STRENGTH: 0.1,
   BIRTH_CHORD_COMPLETION: true,
+  PLACED_ENERGY: 1.0,
+  BIRTH_ENERGY: 0.7,
   ENERGY_DECAY_PER_TICK: 0.02,
   CONSONANCE_ENERGY_RESTORE: 0.05,
   VOLUME_DENSITY_DIVISOR: 'sqrt',
