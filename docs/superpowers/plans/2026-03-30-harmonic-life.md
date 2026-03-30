@@ -22,7 +22,8 @@ src/
     harmony.ts        — INTERVAL_SCORES, getInterval, scoreHarmony, getConsonantNeighbors
     grid.ts           — Grid class: create, get, set, getNeighbors, forEachCell, density
     music.ts          — SCALES, CHORD_TEMPLATES, getScaleNotes, findChordCompletion
-    rules.ts          — survives(), birthNote(), applyPitchGravity(), updateEnergy(), tick()
+    rules.ts          — survives(), applyPitchGravity(), updateEnergy()
+    tick.ts           — simulateTick() — orchestrates one full tick
     conductor.ts      — ConductorState type, createConductor(), updateConductor()
   audio/
     synth.ts          — initAudio(), triggerNotes(), dispose()
@@ -661,7 +662,7 @@ git commit -m "feat: add scales, chord templates, and chord completion logic"
 ```typescript
 // src/engine/__tests__/rules.test.ts
 import { describe, it, expect } from 'vitest'
-import { survives, computeBirthNote, updateEnergy, applyPitchGravity } from '../rules'
+import { survives, updateEnergy, applyPitchGravity } from '../rules'
 import { createCell } from '../cell'
 
 describe('survives', () => {
@@ -828,13 +829,15 @@ describe('createConductor', () => {
     expect(c.tick).toBe(0)
     expect(c.key).toBe(0) // C
     expect(c.progressionIndex).toBe(0)
-    expect(c.curveMultiplier).toBeCloseTo(0) // starts at 0 (rise phase)
+    expect(c.curveMultiplier).toBe(1.0) // starts at 1.0 so cells don't die immediately
   })
 })
 
 describe('getEnergyCurve', () => {
-  it('returns 0 at tick 0 (start of rise)', () => {
-    expect(getEnergyCurve(0, 200)).toBeCloseTo(0)
+  it('returns small value at tick 0 (start of rise)', () => {
+    // tick 0 is before the curve starts — curve only applies from tick 1
+    expect(getEnergyCurve(1, 200)).toBeGreaterThan(0)
+    expect(getEnergyCurve(1, 200)).toBeLessThan(0.1)
   })
 
   it('returns ~1.0 during plateau', () => {
@@ -876,7 +879,7 @@ export function createConductor(key = 0, scale = 'pentatonic'): ConductorState {
     key,
     scale,
     progressionIndex: 0,
-    curveMultiplier: getEnergyCurve(0, CONFIG.ARC_DURATION_TICKS),
+    curveMultiplier: 1.0, // Start at 1.0; curve takes over from tick 1
     consonanceRatio: 0,
     stableTickCount: 0,
     thresholdAdjustment: 0,
@@ -976,6 +979,7 @@ git commit -m "feat: add conductor — energy curve, key tracking, progression"
 ```typescript
 // src/store/store.ts
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
 import { Grid, createGrid } from '@/engine/grid'
 import { ConductorState, createConductor } from '@/engine/conductor'
 import { CONFIG } from '@/engine/config'
@@ -1016,7 +1020,7 @@ type Store = {
   reset: () => void
 }
 
-export const useStore = create<Store>((set) => ({
+export const useStore = create<Store>()(subscribeWithSelector((set) => ({
   grid: createGrid(CONFIG.GRID_SIZE),
   gridSize: CONFIG.GRID_SIZE,
   conductor: createConductor(),
@@ -1053,7 +1057,7 @@ export const useStore = create<Store>((set) => ({
     playback: 'setup',
     tick: 0,
   }),
-}))
+})))
 ```
 
 - [ ] **Step 2: Commit**
@@ -1639,8 +1643,8 @@ export function triggerNotes(notes: { midi: number; volume: number }[]): void {
   const now = Tone.now()
   for (const { midi, volume } of notes) {
     const name = midiToNoteName(midi)
-    const db = Tone.gainToDb(Math.max(0.01, Math.min(1, volume)))
-    synth.triggerAttackRelease(name, '4n', now, Tone.dbToGain(db + Tone.gainToDb(0.3)))
+    const velocity = Math.max(0.01, Math.min(1, volume * 0.3))
+    synth.triggerAttackRelease(name, '4n', now, velocity)
   }
 }
 
@@ -1938,40 +1942,240 @@ git commit -m "feat: add visual polish — glow, particles, harmonic connection 
 
 ---
 
-### Task 13: Settings Drawer
+### Task 13: Runtime Settings + Settings Drawer
 
 **Files:**
 - Create: `src/ui/SettingsDrawer.tsx`
-- Modify: `src/app/page.tsx`
+- Modify: `src/store/store.ts`, `src/app/page.tsx`, `src/engine/tick.ts`
 
-- [ ] **Step 1: Create SettingsDrawer.tsx**
+The simulation must read tunable values from the store at tick time, not from the static CONFIG object. This enables runtime changes via UI sliders.
 
-A slide-out drawer with sliders for key tunable values:
-- Root key selector (dropdown, C through B)
+- [ ] **Step 1: Add runtime settings to store**
+
+Add to the Zustand store:
+
+```typescript
+// Add to Store type
+consonanceThreshold: number
+tickIntervalMs: number
+reverbMix: number
+cellGlow: boolean
+harmonicConnections: boolean
+particleEffects: boolean
+
+// Add actions
+setConsonanceThreshold: (v: number) => void
+setTickIntervalMs: (v: number) => void
+setReverbMix: (v: number) => void
+setCellGlow: (v: boolean) => void
+setHarmonicConnections: (v: boolean) => void
+setParticleEffects: (v: boolean) => void
+```
+
+Initialize from CONFIG defaults.
+
+- [ ] **Step 2: Update simulateTick to accept threshold parameter**
+
+Change `simulateTick` signature to accept `consonanceThreshold` as a parameter instead of reading from CONFIG directly. Update `useSimulation.ts` to pass `state.consonanceThreshold + conductor.thresholdAdjustment`.
+
+- [ ] **Step 3: Create SettingsDrawer.tsx**
+
+Slide-out drawer with:
+- Root key selector (dropdown, C through B) — updates `conductor.key` via a `forceKeyChange` store action
 - Scale selector (dropdown: pentatonic, major, minor, blues, dorian)
 - Consonance threshold slider (0.0 – 2.0)
 - Tempo/tick interval slider (100ms – 1000ms)
 - Reverb mix slider (0 – 1)
 - Toggle switches for: glow, harmonic connections, particles
 
-- [ ] **Step 2: Wire into page.tsx**
+Root key change during playback forces a modulation by updating `conductor.key` directly.
 
-Add a gear icon button that toggles the drawer open/closed.
+- [ ] **Step 4: Wire into page.tsx**
 
-- [ ] **Step 3: Verify in browser**
+Add a gear icon button that toggles the drawer.
 
-Confirm settings drawer opens, sliders adjust values, changes affect simulation in real time.
+- [ ] **Step 5: Verify in browser**
 
-- [ ] **Step 4: Commit**
+Confirm: sliders change behavior in real time. Key change during playback causes modulation. Threshold change affects survival.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/ui/SettingsDrawer.tsx src/app/page.tsx
-git commit -m "feat: add settings drawer with tunable parameters"
+git add src/ui/SettingsDrawer.tsx src/store/store.ts src/app/page.tsx src/engine/tick.ts
+git commit -m "feat: add settings drawer with runtime-configurable parameters"
 ```
 
 ---
 
-### Task 14: Final Integration + Deploy
+### Task 14: Playback Interactions (Seeds, Silence Bombs, Brushes)
+
+**Files:**
+- Modify: `src/app/page.tsx`, `src/store/store.ts`, `src/engine/grid.ts`, `src/engine/tick.ts`
+- Create: `src/engine/brushes.ts`
+
+- [ ] **Step 1: Enable click-to-place during playback**
+
+Update `page.tsx` click handler to work when `playback === 'playing'` (not just 'setup'). Placed cells during playback get `PLACED_ENERGY`.
+
+- [ ] **Step 2: Implement brushes.ts**
+
+```typescript
+// src/engine/brushes.ts
+import { Cell, createCell } from './cell'
+import { getScaleNotes } from './music'
+import { CONFIG } from './config'
+
+type BrushResult = { dx: number; dy: number; note: number }[]
+
+export function applyBrush(
+  brush: 'single' | 'chord' | 'scatter' | 'bass' | 'random',
+  note: number,
+  rootKey: number,
+  scale: string,
+): BrushResult {
+  const scaleNotes = getScaleNotes(rootKey, scale)
+  const octave = Math.floor(note / 12)
+
+  switch (brush) {
+    case 'single':
+      return [{ dx: 0, dy: 0, note }]
+
+    case 'chord': {
+      // Place a major triad cluster
+      const third = octave * 12 + scaleNotes[Math.min(2, scaleNotes.length - 1)]
+      const fifth = octave * 12 + scaleNotes[Math.min(4, scaleNotes.length - 1)]
+      return [
+        { dx: 0, dy: 0, note },
+        { dx: 1, dy: 0, note: third },
+        { dx: 0, dy: 1, note: fifth },
+      ]
+    }
+
+    case 'scatter': {
+      // Scatter 4-6 notes randomly in a 5x5 area
+      const results: BrushResult = []
+      const count = 4 + Math.floor(Math.random() * 3)
+      for (let i = 0; i < count; i++) {
+        const dx = Math.floor(Math.random() * 5) - 2
+        const dy = Math.floor(Math.random() * 5) - 2
+        const pc = scaleNotes[Math.floor(Math.random() * scaleNotes.length)]
+        results.push({ dx, dy, note: octave * 12 + pc })
+      }
+      return results
+    }
+
+    case 'bass': {
+      // Low sustained note, 2 octaves down
+      const bassNote = Math.max(24, note - 24)
+      return [
+        { dx: 0, dy: 0, note: bassNote },
+        { dx: 1, dy: 0, note: bassNote },
+        { dx: 0, dy: 1, note: bassNote },
+      ]
+    }
+
+    case 'random': {
+      // Random notes from scale in a 3x3 area
+      const results: BrushResult = []
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (Math.random() > 0.5) {
+            const pc = scaleNotes[Math.floor(Math.random() * scaleNotes.length)]
+            const oct = octave + Math.floor(Math.random() * 2) - 1
+            results.push({ dx, dy, note: Math.max(24, Math.min(96, oct * 12 + pc)) })
+          }
+        }
+      }
+      return results
+    }
+  }
+}
+```
+
+- [ ] **Step 3: Add brush selector to NotePalette**
+
+Add a row of brush type buttons (single, chord, scatter, bass, random) above the note buttons. Store selection in Zustand.
+
+- [ ] **Step 4: Update click handler to use brushes**
+
+In `page.tsx`, when a cell is clicked, call `applyBrush()` and place all resulting cells.
+
+- [ ] **Step 5: Implement silence bombs**
+
+Add a "silence bomb" mode toggle to ControlPanel. When active, clicking the grid kills all cells within radius 3 and marks those positions with a 3-tick rebirth cooldown.
+
+Add to grid.ts:
+
+```typescript
+// Cooldown map: position index → ticks remaining
+export type CooldownMap = Map<number, number>
+
+export function applySilenceBomb(
+  grid: Grid, size: number, cx: number, cy: number, radius: number
+): { grid: Grid; cooldowns: number[] } {
+  const next = [...grid]
+  const cooldowns: number[] = []
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx * dx + dy * dy > radius * radius) continue
+      const x = cx + dx, y = cy + dy
+      if (x < 0 || x >= size || y < 0 || y >= size) continue
+      next[y * size + x] = null
+      cooldowns.push(y * size + x)
+    }
+  }
+  return { grid: next, cooldowns }
+}
+```
+
+Update `simulateTick` to skip birth for cells with active cooldowns. Store cooldown map in Zustand, decrement each tick.
+
+- [ ] **Step 6: Verify in browser**
+
+Test: brush types place different patterns, silence bomb clears area, cooldown prevents immediate rebirth.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/engine/brushes.ts src/engine/grid.ts src/ui/NotePalette.tsx src/app/page.tsx src/store/store.ts src/engine/tick.ts
+git commit -m "feat: add brushes, silence bombs, and playback interactions"
+```
+
+---
+
+### Task 15: Mood/Tempo Presets
+
+**Files:**
+- Modify: `src/ui/ControlPanel.tsx`, `src/store/store.ts`
+
+- [ ] **Step 1: Define presets**
+
+Add to store or a constants file:
+
+```typescript
+const MOOD_PRESETS = {
+  'slow-ambient': { tickIntervalMs: 600, tempoBpm: 60, reverbMix: 0.7, consonanceThreshold: 0.3 },
+  'medium-flow':  { tickIntervalMs: 300, tempoBpm: 80, reverbMix: 0.4, consonanceThreshold: 0.5 },
+  'upbeat-pulse': { tickIntervalMs: 150, tempoBpm: 120, reverbMix: 0.2, consonanceThreshold: 0.7 },
+}
+```
+
+- [ ] **Step 2: Add preset selector to ControlPanel**
+
+Three buttons or a dropdown: "Ambient", "Flow", "Pulse". Applying a preset updates the relevant store values.
+
+- [ ] **Step 3: Verify presets change behavior**
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/ui/ControlPanel.tsx src/store/store.ts
+git commit -m "feat: add mood/tempo presets (ambient, flow, pulse)"
+```
+
+---
+
+### Task 16: Final Integration + Deploy
 
 **Files:**
 - Modify: various cleanup
@@ -2010,7 +2214,10 @@ Vercel auto-deploys from main. Verify the deployment URL works.
 
 Visit the Vercel URL. Confirm:
 - Grid renders
-- Notes can be placed
+- Notes can be placed with all brush types
 - Play starts simulation with audio
-- Visual effects work
-- Settings drawer opens
+- Silence bombs work
+- Visual effects (glow, particles, connections) work
+- Settings drawer opens and changes take effect
+- Mood presets change behavior
+- Piece ends naturally via energy curve
