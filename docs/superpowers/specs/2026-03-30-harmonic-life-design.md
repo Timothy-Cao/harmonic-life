@@ -56,6 +56,7 @@ Each living cell scores harmonic support from living neighbors. The interval bet
 | 4 | Major third | +0.5 |
 | 3 | Minor third | +0.4 |
 | 9 | Major sixth | +0.3 |
+| 8 | Minor sixth | +0.3 |
 | 2 | Major 2nd | 0.0 |
 | 10 | Minor 7th | -0.2 |
 | 6 | Tritone | -0.5 |
