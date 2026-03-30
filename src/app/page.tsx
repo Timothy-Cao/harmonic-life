@@ -4,6 +4,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store/store'
 import { drawGrid, canvasToGrid } from '@/canvas/renderer'
 import NotePalette from '@/ui/NotePalette'
+import ControlPanel from '@/ui/ControlPanel'
 
 const CANVAS_SIZE = 600
 
@@ -52,6 +53,7 @@ export default function Home() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
       <h1 className="text-2xl font-bold tracking-tight">Harmonic Life</h1>
+      <ControlPanel />
       <canvas
         ref={canvasRef}
         width={CANVAS_SIZE}
