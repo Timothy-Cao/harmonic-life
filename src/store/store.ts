@@ -33,6 +33,7 @@ type Store = {
   cellGlow: boolean
   harmonicConnections: boolean
   particleEffects: boolean
+  silenceBombActive: boolean
 
   // Actions
   setCell: (x: number, y: number, note: number) => void
@@ -52,6 +53,8 @@ type Store = {
   setCellGlow: (v: boolean) => void
   setHarmonicConnections: (v: boolean) => void
   setParticleEffects: (v: boolean) => void
+  toggleSilenceBomb: () => void
+  applyPreset: (preset: 'slow-ambient' | 'medium-flow' | 'upbeat-pulse') => void
   reset: () => void
 }
 
@@ -73,6 +76,7 @@ export const useStore = create<Store>()(subscribeWithSelector((set) => ({
   cellGlow: CONFIG.CELL_GLOW,
   harmonicConnections: CONFIG.HARMONIC_CONNECTIONS,
   particleEffects: CONFIG.PARTICLE_EFFECTS,
+  silenceBombActive: false,
 
   setCell: (x, y, note) => set((s) => {
     const next = [...s.grid]
@@ -99,6 +103,15 @@ export const useStore = create<Store>()(subscribeWithSelector((set) => ({
   setCellGlow: (cellGlow) => set({ cellGlow }),
   setHarmonicConnections: (harmonicConnections) => set({ harmonicConnections }),
   setParticleEffects: (particleEffects) => set({ particleEffects }),
+  toggleSilenceBomb: () => set((s) => ({ silenceBombActive: !s.silenceBombActive })),
+  applyPreset: (preset) => {
+    const presets = {
+      'slow-ambient': { tickIntervalMs: 600, reverbMix: 0.7, consonanceThreshold: 0.3 },
+      'medium-flow': { tickIntervalMs: 300, reverbMix: 0.4, consonanceThreshold: 0.5 },
+      'upbeat-pulse': { tickIntervalMs: 150, reverbMix: 0.2, consonanceThreshold: 0.7 },
+    }
+    set(presets[preset])
+  },
   reset: () => set({
     grid: createGrid(CONFIG.GRID_SIZE),
     conductor: createConductor(),

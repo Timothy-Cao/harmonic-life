@@ -5,7 +5,7 @@ import { useSimulation } from '@/hooks/useSimulation'
 import { useAudio } from '@/hooks/useAudio'
 
 export default function ControlPanel() {
-  const { playback, tick, conductor, muted, toggleMute } = useStore()
+  const { playback, tick, conductor, muted, toggleMute, silenceBombActive, toggleSilenceBomb, applyPreset } = useStore()
   const { play, pause, stop } = useSimulation()
   const { init: initAudio } = useAudio()
 
@@ -44,6 +44,29 @@ export default function ControlPanel() {
       >
         {muted ? 'Unmute' : 'Mute'}
       </button>
+      <div className="flex items-center gap-1 ml-2 border border-white/10 rounded overflow-hidden">
+        <button
+          onClick={() => applyPreset('slow-ambient')}
+          className="px-2 py-1 text-xs bg-white/5 hover:bg-indigo-600/50"
+          title="Slow Ambient: 600ms tick, high reverb"
+        >
+          Ambient
+        </button>
+        <button
+          onClick={() => applyPreset('medium-flow')}
+          className="px-2 py-1 text-xs bg-white/5 hover:bg-teal-600/50 border-l border-white/10"
+          title="Medium Flow: 300ms tick, medium reverb"
+        >
+          Flow
+        </button>
+        <button
+          onClick={() => applyPreset('upbeat-pulse')}
+          className="px-2 py-1 text-xs bg-white/5 hover:bg-orange-600/50 border-l border-white/10"
+          title="Upbeat Pulse: 150ms tick, low reverb"
+        >
+          Pulse
+        </button>
+      </div>
       <span className="text-xs text-white/40 ml-2">
         Tick: {tick} | Key: {['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][conductor.key]}
       </span>
