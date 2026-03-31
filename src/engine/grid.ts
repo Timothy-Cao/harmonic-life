@@ -41,3 +41,18 @@ export function gridDensity(grid: Grid, size: number): number {
   }
   return count / (size * size)
 }
+
+export function applySilenceBomb(
+  grid: Grid, size: number, cx: number, cy: number, radius: number
+): Grid {
+  const next = [...grid]
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx * dx + dy * dy > radius * radius) continue
+      const x = cx + dx, y = cy + dy
+      if (x < 0 || x >= size || y < 0 || y >= size) continue
+      next[y * size + x] = null
+    }
+  }
+  return next
+}

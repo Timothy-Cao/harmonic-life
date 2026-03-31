@@ -44,6 +44,17 @@ export default function ControlPanel() {
       >
         {muted ? 'Unmute' : 'Mute'}
       </button>
+      <button
+        onClick={toggleSilenceBomb}
+        className={`px-3 py-2 rounded text-sm transition-all ${
+          silenceBombActive
+            ? 'bg-purple-600 ring-2 ring-purple-400 text-white'
+            : 'bg-white/5 text-white/70 hover:bg-white/10'
+        }`}
+        title="Silence Bomb: click the grid to erase a circular area (radius 3)"
+      >
+        Silence Bomb
+      </button>
       <div className="flex items-center gap-1 ml-2 border border-white/10 rounded overflow-hidden">
         <button
           onClick={() => applyPreset('slow-ambient')}

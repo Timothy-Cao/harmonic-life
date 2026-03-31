@@ -3,6 +3,8 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useStore } from '@/store/store'
 import { drawGrid, canvasToGrid } from '@/canvas/renderer'
+import { applySilenceBomb } from '@/engine/grid'
+import { applyBrush } from '@/engine/brushes'
 import NotePalette from '@/ui/NotePalette'
 import ControlPanel from '@/ui/ControlPanel'
 import SettingsDrawer from '@/ui/SettingsDrawer'
@@ -11,7 +13,7 @@ const CANVAS_SIZE = 600
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { grid, gridSize, selectedNote, setCell, clearCell } = useStore()
+  const { grid, gridSize, setCell, setGrid } = useStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Draw loop
@@ -44,13 +46,28 @@ export default function Home() {
     )
     if (!pos) return
 
-    const { selectedNote } = useStore.getState()
+    const { selectedNote, brushType, rootKey, scale, silenceBombActive, grid: currentGrid } = useStore.getState()
+
+    if (silenceBombActive) {
+      const nextGrid = applySilenceBomb(currentGrid, gridSize, pos.x, pos.y, 3)
+      setGrid(nextGrid)
+      return
+    }
+
     if (selectedNote !== null) {
-      setCell(pos.x, pos.y, selectedNote)
+      const cells = applyBrush(brushType, selectedNote, rootKey, scale)
+      for (const { dx, dy, note } of cells) {
+        const nx = pos.x + dx
+        const ny = pos.y + dy
+        if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
+          setCell(nx, ny, note)
+        }
+      }
     } else {
+      const { clearCell } = useStore.getState()
       clearCell(pos.x, pos.y)
     }
-  }, [gridSize, setCell, clearCell])
+  }, [gridSize, setCell, setGrid])
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
@@ -74,7 +91,7 @@ export default function Home() {
       />
       <NotePalette />
       <p className="text-sm text-white/40">
-        Select a note, then click the grid to place it. Click without a note selected to erase.
+        Select a note and brush, then click the grid to place. Silence Bomb erases a circular area.
       </p>
       <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
