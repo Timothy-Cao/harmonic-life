@@ -1,6 +1,7 @@
 // src/canvas/renderer.ts
 import { Grid, getCell } from '@/engine/grid'
 import { getMidiNote } from '@/engine/cell'
+import { getInterval, intervalScore } from '@/engine/harmony'
 
 const BG_COLOR = '#0a0a0f'
 
@@ -48,10 +49,62 @@ export function drawGrid(
       const hue = noteToHue(cell.note)
       const lightness = 40 + cell.energy * 30
 
+      // Glow effect: radial gradient around the cell
+      const glowRadius = radius * (1.5 + cell.energy * 1.5)
+      const glow = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, glowRadius)
+      glow.addColorStop(0, `hsla(${hue}, 80%, 60%, ${0.3 * cell.energy})`)
+      glow.addColorStop(1, `hsla(${hue}, 80%, 60%, 0)`)
+      ctx.fillStyle = glow
+      ctx.beginPath()
+      ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Base cell circle
       ctx.fillStyle = `hsl(${hue}, 80%, ${lightness}%)`
       ctx.beginPath()
       ctx.arc(cx, cy, radius, 0, Math.PI * 2)
       ctx.fill()
+    }
+  }
+
+  // Draw harmonic connection lines between consonant neighbors
+  const neighborOffsets: [number, number][] = [
+    [1, 0],   // right
+    [1, 1],   // bottom-right
+    [0, 1],   // bottom
+    [-1, 1],  // bottom-left
+  ]
+
+  for (let y = 0; y < gridSize; y++) {
+    for (let x = 0; x < gridSize; x++) {
+      const cellA = getCell(grid, gridSize, x, y)
+      if (!cellA) continue
+
+      const cxA = x * cellW + cellW / 2
+      const cyA = y * cellH + cellH / 2
+
+      for (const [dx, dy] of neighborOffsets) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) continue
+
+        const cellB = getCell(grid, gridSize, nx, ny)
+        if (!cellB) continue
+
+        const interval = getInterval(cellA.note, cellB.note)
+        const score = intervalScore(interval)
+        if (score <= 0.3) continue
+
+        const cxB = nx * cellW + cellW / 2
+        const cyB = ny * cellH + cellH / 2
+
+        ctx.strokeStyle = `rgba(255,255,255,${score * 0.15})`
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(cxA, cyA)
+        ctx.lineTo(cxB, cyB)
+        ctx.stroke()
+      }
     }
   }
 }
