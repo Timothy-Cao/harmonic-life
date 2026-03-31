@@ -26,6 +26,14 @@ type Store = {
   brushType: 'single' | 'chord' | 'scatter' | 'bass' | 'random'
   muted: boolean
 
+  // Runtime settings
+  consonanceThreshold: number
+  tickIntervalMs: number
+  reverbMix: number
+  cellGlow: boolean
+  harmonicConnections: boolean
+  particleEffects: boolean
+
   // Actions
   setCell: (x: number, y: number, note: number) => void
   clearCell: (x: number, y: number) => void
@@ -38,6 +46,12 @@ type Store = {
   setRootKey: (key: number) => void
   setScale: (scale: string) => void
   toggleMute: () => void
+  setConsonanceThreshold: (v: number) => void
+  setTickIntervalMs: (v: number) => void
+  setReverbMix: (v: number) => void
+  setCellGlow: (v: boolean) => void
+  setHarmonicConnections: (v: boolean) => void
+  setParticleEffects: (v: boolean) => void
   reset: () => void
 }
 
@@ -52,6 +66,13 @@ export const useStore = create<Store>()(subscribeWithSelector((set) => ({
   selectedNote: null,
   brushType: 'single',
   muted: false,
+
+  consonanceThreshold: CONFIG.CONSONANCE_THRESHOLD,
+  tickIntervalMs: CONFIG.TICK_INTERVAL_MS,
+  reverbMix: CONFIG.REVERB_MIX,
+  cellGlow: CONFIG.CELL_GLOW,
+  harmonicConnections: CONFIG.HARMONIC_CONNECTIONS,
+  particleEffects: CONFIG.PARTICLE_EFFECTS,
 
   setCell: (x, y, note) => set((s) => {
     const next = [...s.grid]
@@ -72,6 +93,12 @@ export const useStore = create<Store>()(subscribeWithSelector((set) => ({
   setRootKey: (rootKey) => set({ rootKey }),
   setScale: (scale) => set({ scale }),
   toggleMute: () => set((s) => ({ muted: !s.muted })),
+  setConsonanceThreshold: (consonanceThreshold) => set({ consonanceThreshold }),
+  setTickIntervalMs: (tickIntervalMs) => set({ tickIntervalMs }),
+  setReverbMix: (reverbMix) => set({ reverbMix }),
+  setCellGlow: (cellGlow) => set({ cellGlow }),
+  setHarmonicConnections: (harmonicConnections) => set({ harmonicConnections }),
+  setParticleEffects: (particleEffects) => set({ particleEffects }),
   reset: () => set({
     grid: createGrid(CONFIG.GRID_SIZE),
     conductor: createConductor(),

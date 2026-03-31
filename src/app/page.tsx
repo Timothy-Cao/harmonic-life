@@ -1,16 +1,18 @@
 'use client'
 
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { useStore } from '@/store/store'
 import { drawGrid, canvasToGrid } from '@/canvas/renderer'
 import NotePalette from '@/ui/NotePalette'
 import ControlPanel from '@/ui/ControlPanel'
+import SettingsDrawer from '@/ui/SettingsDrawer'
 
 const CANVAS_SIZE = 600
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { grid, gridSize, selectedNote, setCell, clearCell } = useStore()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Draw loop
   useEffect(() => {
@@ -52,7 +54,16 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
-      <h1 className="text-2xl font-bold tracking-tight">Harmonic Life</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">Harmonic Life</h1>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="text-white/40 hover:text-white text-xl"
+          aria-label="Open settings"
+        >
+          &#9881;
+        </button>
+      </div>
       <ControlPanel />
       <canvas
         ref={canvasRef}
@@ -65,6 +76,7 @@ export default function Home() {
       <p className="text-sm text-white/40">
         Select a note, then click the grid to place it. Click without a note selected to erase.
       </p>
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
   )
 }
