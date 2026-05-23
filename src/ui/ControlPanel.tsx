@@ -4,7 +4,11 @@ import { useStore, PATTERN_ORDER } from '@/store/store'
 import { useSimulation } from '@/hooks/useSimulation'
 
 export default function ControlPanel() {
-  const { playing, clear, cyclePattern, patternIndex } = useStore()
+  // Selector-per-field so playhead/grid/bar ticks don't re-render this panel.
+  const playing = useStore((s) => s.playing)
+  const patternIndex = useStore((s) => s.patternIndex)
+  const clear = useStore((s) => s.clear)
+  const cyclePattern = useStore((s) => s.cyclePattern)
   const { pause, start } = useSimulation()
 
   return (

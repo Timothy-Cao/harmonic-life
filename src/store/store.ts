@@ -27,12 +27,12 @@ type Store = {
 }
 
 export const useStore = create<Store>()(subscribeWithSelector((set, get) => ({
-  grid: stampPattern('glider', CONFIG.GRID_SIZE),
+  grid: stampPattern('pulsar', CONFIG.GRID_SIZE),
   gridSize: CONFIG.GRID_SIZE,
   playhead: 0,
   bar: 0,
   playing: false,
-  patternIndex: 0,
+  patternIndex: PATTERN_ORDER.indexOf('pulsar'),
 
   toggle: (x, y) => set((s) => ({ grid: toggleCell(s.grid, s.gridSize, x, y) })),
   setGrid: (grid) => set({ grid }),

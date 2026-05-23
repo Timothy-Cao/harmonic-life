@@ -12,7 +12,10 @@ const CANVAS_SIZE = 640
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { gridSize, toggle } = useStore()
+  // Subscribe ONLY to the fields we read. Without selectors, every per-tick
+  // playhead/grid/bar update would re-render this component ~5x/sec.
+  const gridSize = useStore((s) => s.gridSize)
+  const toggle = useStore((s) => s.toggle)
   const [started, setStarted] = useState(false)
   const { start } = useSimulation()
 
