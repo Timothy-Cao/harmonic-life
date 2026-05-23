@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Harmonic Life",
-  description: "A musical zero-player game — cellular automata driven by music theory",
+  title: "Harmonic Life — A garden of sound",
+  description: "Plant notes. Watch them live, harmonize, and bloom into generative ambient music.",
 };
 
 export default function RootLayout({

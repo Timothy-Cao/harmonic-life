@@ -13,7 +13,12 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(76, 50, 130, 0.25) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(30, 80, 120, 0.22) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 50%, rgba(20, 16, 36, 1) 0%, #050509 80%);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
 }
