@@ -3,20 +3,18 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useStore } from '@/store/store'
 import { drawGrid, canvasToGrid } from '@/canvas/renderer'
-import { applySilenceBomb } from '@/engine/grid'
-import { applyBrush } from '@/engine/brushes'
-import NotePalette from '@/ui/NotePalette'
+import { useSimulation } from '@/hooks/useSimulation'
 import ControlPanel from '@/ui/ControlPanel'
-import SettingsDrawer from '@/ui/SettingsDrawer'
 
-const CANVAS_SIZE = 600
+const CANVAS_SIZE = 640
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { grid, gridSize, setCell, setGrid } = useStore()
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { gridSize, toggle } = useStore()
+  const [started, setStarted] = useState(false)
+  const { start } = useSimulation()
 
-  // Draw loop
+  // Render loop — reads grid + playhead directly from store on each frame
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -25,15 +23,15 @@ export default function Home() {
 
     let raf: number
     const draw = () => {
-      drawGrid(ctx, useStore.getState().grid, gridSize, CANVAS_SIZE, CANVAS_SIZE)
+      const s = useStore.getState()
+      drawGrid(ctx, s.grid, s.gridSize, CANVAS_SIZE, CANVAS_SIZE, s.playhead)
       raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [gridSize])
+  }, [])
 
-  // Click handler
-  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
@@ -45,55 +43,49 @@ export default function Home() {
       gridSize,
     )
     if (!pos) return
+    toggle(pos.x, pos.y)
+  }, [gridSize, toggle])
 
-    const { selectedNote, brushType, rootKey, scale, silenceBombActive, grid: currentGrid } = useStore.getState()
-
-    if (silenceBombActive) {
-      const nextGrid = applySilenceBomb(currentGrid, gridSize, pos.x, pos.y, 3)
-      setGrid(nextGrid)
-      return
-    }
-
-    if (selectedNote !== null) {
-      const cells = applyBrush(brushType, selectedNote, rootKey, scale)
-      for (const { dx, dy, note } of cells) {
-        const nx = pos.x + dx
-        const ny = pos.y + dy
-        if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
-          setCell(nx, ny, note)
-        }
-      }
-    } else {
-      const { clearCell } = useStore.getState()
-      clearCell(pos.x, pos.y)
-    }
-  }, [gridSize, setCell, setGrid])
+  const beginSession = useCallback(async () => {
+    setStarted(true)
+    await start()
+  }, [start])
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">Harmonic Life</h1>
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="text-white/40 hover:text-white text-xl"
-          aria-label="Open settings"
-        >
-          &#9881;
-        </button>
+    <main className="min-h-screen flex flex-col items-center justify-center gap-5 p-4 relative">
+      <div className="flex flex-col items-center gap-1">
+        <h1 className="text-3xl font-light tracking-[0.25em] uppercase text-white/90">
+          Harmonic Life
+        </h1>
+        <p className="text-xs text-white/40 tracking-wide">
+          Conway&apos;s Game of Life — but it makes music.
+        </p>
       </div>
+
       <ControlPanel />
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        onClick={handleClick}
-        className="border border-white/10 rounded cursor-crosshair"
-      />
-      <NotePalette />
-      <p className="text-sm text-white/40">
-        Select a note and brush, then click the grid to place. Silence Bomb erases a circular area.
+
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_SIZE}
+          height={CANVAS_SIZE}
+          onClick={handleCanvasClick}
+          className="rounded-lg cursor-pointer ring-1 ring-white/10 shadow-[0_0_60px_rgba(80,60,160,0.2)]"
+        />
+        {!started && (
+          <button
+            onClick={() => void beginSession()}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 backdrop-blur-sm rounded-lg text-white hover:bg-black/40 transition"
+          >
+            <span className="text-2xl font-light tracking-widest uppercase">Tap to begin</span>
+            <span className="text-xs text-white/60">Sound will play</span>
+          </button>
+        )}
+      </div>
+
+      <p className="text-xs text-white/40 max-w-md text-center leading-relaxed">
+        Click any cell to bring it to life. Watch them grow, dance, and die — every living cell sings a note as the playhead sweeps across.
       </p>
-      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
   )
 }

@@ -1,22 +1,12 @@
+// src/engine/config.ts
+// The few global knobs left after the simplification.
+
 export const CONFIG = {
-  GRID_SIZE: 48,
-  TICK_INTERVAL_MS: 300,
-  CONSONANCE_THRESHOLD: 0.5,
-  PITCH_GRAVITY_STRENGTH: 0.1,
-  BIRTH_CHORD_COMPLETION: true,
-  PLACED_ENERGY: 1.0,
-  BIRTH_ENERGY: 0.7,
-  ENERGY_DECAY_PER_TICK: 0.02,
-  CONSONANCE_ENERGY_RESTORE: 0.05,
-  GLOBAL_ENERGY_CURVE: 'arc' as const,
-  ARC_DURATION_TICKS: 200,
-  KEY_CHANGE_PROBABILITY: 0.005,
-  PROGRESSION: ['I', 'IV', 'V', 'I'] as const,
-  DENSITY_TARGET: 0.15,
-  SYNTH_TYPE: 'pad' as const,
-  REVERB_MIX: 0.4,
-  TEMPO_BPM: 80,
-  CELL_GLOW: true,
-  HARMONIC_CONNECTIONS: true,
-  PARTICLE_EFFECTS: true,
+  GRID_SIZE: 32,
+  BPM: 110,
+  // Conway tick rate, in 16th-note steps. 4 = once per beat.
+  CONWAY_STEPS_PER_TICK: 4,
+  // Max simultaneous notes per playhead column (keeps dense grids from sounding like mud).
+  MAX_NOTES_PER_COLUMN: 4,
+  ROOT_KEY: 0, // 0 = C
 }

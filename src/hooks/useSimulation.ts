@@ -1,63 +1,90 @@
 // src/hooks/useSimulation.ts
+// Drives the sequencer: every 16th note, advance the playhead, fire notes for the
+// new column, and (every CONWAY_STEPS_PER_TICK steps) advance Conway. Bass plays
+// on the downbeat of each bar using a fixed pentatonic-friendly progression.
+
 'use client'
 
-import { useCallback, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import * as Tone from 'tone'
 import { useStore } from '@/store/store'
-import { simulateTick, TickResult } from '@/engine/tick'
-import { getScaleNotes } from '@/engine/music'
 import { CONFIG } from '@/engine/config'
+import { rowToMidi, bassNoteForBar } from '@/engine/music'
+import { initAudio, playColumn, playBass } from '@/audio/synth'
+import { stepConway } from '@/engine/grid'
 
 export function useSimulation() {
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const lastTickResult = useRef<TickResult | null>(null)
+  const repeatIdRef = useRef<number | null>(null)
+  const stepCounterRef = useRef(0)
 
-  const doTick = useCallback(() => {
-    const state = useStore.getState()
-    if (state.playback !== 'playing') return
+  const start = useCallback(async () => {
+    await initAudio()
+    const transport = Tone.getTransport()
 
-    const scaleNotes = getScaleNotes(state.conductor.key, state.conductor.scale)
-    const result = simulateTick(state.grid, state.gridSize, state.conductor, scaleNotes)
+    if (repeatIdRef.current === null) {
+      repeatIdRef.current = transport.scheduleRepeat((time: number) => {
+        const state = useStore.getState()
+        const { grid, gridSize } = state
+        const col = state.playhead
 
-    lastTickResult.current = result
-    state.setGrid(result.grid)
-    state.setConductor(result.conductor)
-    state.setTick(state.tick + 1)
+        // Collect alive rows in the current column → pentatonic-mapped MIDI notes
+        const aliveRows: number[] = []
+        for (let y = 0; y < gridSize; y++) {
+          if (grid[y * gridSize + col]) aliveRows.push(y)
+        }
+        // Cap polyphony: take the top, the bottom, and pick a couple from the middle.
+        // Simpler: just take the first N from a deterministic stride so columns sound consistent.
+        const picks = aliveRows.length <= CONFIG.MAX_NOTES_PER_COLUMN
+          ? aliveRows
+          : pickEvenly(aliveRows, CONFIG.MAX_NOTES_PER_COLUMN)
 
-    if (result.finished) {
-      state.setPlayback('finished')
+        const notes = picks.map(y => rowToMidi(y, gridSize, CONFIG.ROOT_KEY))
+        if (notes.length > 0) playColumn(notes, time)
+
+        // Bass: downbeat of each bar (every 16 steps)
+        if (stepCounterRef.current % 16 === 0) {
+          const bar = Math.floor(stepCounterRef.current / 16)
+          playBass(bassNoteForBar(bar, CONFIG.ROOT_KEY), time)
+          state.setBar(bar)
+        }
+
+        // Conway step
+        stepCounterRef.current++
+        if (stepCounterRef.current % CONFIG.CONWAY_STEPS_PER_TICK === 0) {
+          state.setGrid(stepConway(grid, gridSize))
+        }
+
+        // Advance playhead
+        const nextCol = (col + 1) % gridSize
+        state.setPlayhead(nextCol)
+      }, '16n')
     }
-  }, [])
 
-  const play = useCallback(() => {
-    const state = useStore.getState()
-    if (state.playback === 'finished') return
-    useStore.getState().setPlayback('playing')
+    if (transport.state !== 'started') transport.start()
+    useStore.getState().setPlaying(true)
   }, [])
 
   const pause = useCallback(() => {
-    useStore.getState().setPlayback('paused')
+    Tone.getTransport().pause()
+    useStore.getState().setPlaying(false)
   }, [])
 
-  const stop = useCallback(() => {
-    useStore.getState().reset()
-  }, [])
-
-  // Tick loop
   useEffect(() => {
-    const unsub = useStore.subscribe((state) => {
-      if (state.playback === 'playing' && !intervalRef.current) {
-        intervalRef.current = setInterval(doTick, CONFIG.TICK_INTERVAL_MS)
-      } else if (state.playback !== 'playing' && intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    })
-
     return () => {
-      unsub()
-      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (repeatIdRef.current !== null) {
+        Tone.getTransport().clear(repeatIdRef.current)
+        repeatIdRef.current = null
+      }
     }
-  }, [doTick])
+  }, [])
 
-  return { play, pause, stop, lastTickResult }
+  return { start, pause }
+}
+
+function pickEvenly<T>(arr: T[], n: number): T[] {
+  if (arr.length <= n) return arr
+  const out: T[] = []
+  const stride = arr.length / n
+  for (let i = 0; i < n; i++) out.push(arr[Math.floor(i * stride)])
+  return out
 }

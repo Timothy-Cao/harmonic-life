@@ -1,121 +1,65 @@
 // src/store/store.ts
+// Minimal state: the boolean grid, the playhead column, play/pause flag, and a clear/seed action.
+
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import { Grid, createGrid } from '@/engine/grid'
-import { ConductorState, createConductor } from '@/engine/conductor'
+import { Grid, clearGrid, toggleCell, stepConway } from '@/engine/grid'
+import { stampPattern, PATTERN_ORDER, PatternName } from '@/engine/patterns'
 import { CONFIG } from '@/engine/config'
 
-export type PlaybackState = 'setup' | 'playing' | 'paused' | 'finished'
-
 type Store = {
-  // Grid
   grid: Grid
   gridSize: number
+  playhead: number      // current sequencer column (0..gridSize-1)
+  bar: number           // bar index for the bass progression
+  playing: boolean
+  patternIndex: number  // which pattern was last loaded
 
-  // Conductor
-  conductor: ConductorState
-
-  // Playback
-  playback: PlaybackState
-  tick: number
-
-  // Settings
-  rootKey: number
-  scale: string
-  selectedNote: number | null
-  brushType: 'single' | 'chord' | 'scatter' | 'bass' | 'random'
-  muted: boolean
-
-  // Runtime settings
-  consonanceThreshold: number
-  tickIntervalMs: number
-  reverbMix: number
-  cellGlow: boolean
-  harmonicConnections: boolean
-  particleEffects: boolean
-  silenceBombActive: boolean
-
-  // Actions
-  setCell: (x: number, y: number, note: number) => void
-  clearCell: (x: number, y: number) => void
-  setGrid: (grid: Grid) => void
-  setConductor: (conductor: ConductorState) => void
-  setPlayback: (state: PlaybackState) => void
-  setTick: (tick: number) => void
-  setSelectedNote: (note: number | null) => void
-  setBrushType: (brush: Store['brushType']) => void
-  setRootKey: (key: number) => void
-  setScale: (scale: string) => void
-  toggleMute: () => void
-  setConsonanceThreshold: (v: number) => void
-  setTickIntervalMs: (v: number) => void
-  setReverbMix: (v: number) => void
-  setCellGlow: (v: boolean) => void
-  setHarmonicConnections: (v: boolean) => void
-  setParticleEffects: (v: boolean) => void
-  toggleSilenceBomb: () => void
-  applyPreset: (preset: 'slow-ambient' | 'medium-flow' | 'upbeat-pulse') => void
-  reset: () => void
+  toggle: (x: number, y: number) => void
+  setGrid: (g: Grid) => void
+  step: () => void
+  setPlayhead: (p: number) => void
+  setBar: (b: number) => void
+  setPlaying: (p: boolean) => void
+  clear: () => void
+  loadPattern: (name?: PatternName) => void
+  cyclePattern: () => void
 }
 
-export const useStore = create<Store>()(subscribeWithSelector((set) => ({
-  grid: createGrid(CONFIG.GRID_SIZE),
+export const useStore = create<Store>()(subscribeWithSelector((set, get) => ({
+  grid: stampPattern('glider', CONFIG.GRID_SIZE),
   gridSize: CONFIG.GRID_SIZE,
-  conductor: createConductor(),
-  playback: 'setup',
-  tick: 0,
-  rootKey: 0,
-  scale: 'pentatonic',
-  selectedNote: null,
-  brushType: 'single',
-  muted: false,
+  playhead: 0,
+  bar: 0,
+  playing: false,
+  patternIndex: 0,
 
-  consonanceThreshold: CONFIG.CONSONANCE_THRESHOLD,
-  tickIntervalMs: CONFIG.TICK_INTERVAL_MS,
-  reverbMix: CONFIG.REVERB_MIX,
-  cellGlow: CONFIG.CELL_GLOW,
-  harmonicConnections: CONFIG.HARMONIC_CONNECTIONS,
-  particleEffects: CONFIG.PARTICLE_EFFECTS,
-  silenceBombActive: false,
-
-  setCell: (x, y, note) => set((s) => {
-    const next = [...s.grid]
-    next[y * s.gridSize + x] = { note, energy: CONFIG.PLACED_ENERGY, age: 0 }
-    return { grid: next }
-  }),
-  clearCell: (x, y) => set((s) => {
-    const next = [...s.grid]
-    next[y * s.gridSize + x] = null
-    return { grid: next }
-  }),
+  toggle: (x, y) => set((s) => ({ grid: toggleCell(s.grid, s.gridSize, x, y) })),
   setGrid: (grid) => set({ grid }),
-  setConductor: (conductor) => set({ conductor }),
-  setPlayback: (playback) => set({ playback }),
-  setTick: (tick) => set({ tick }),
-  setSelectedNote: (selectedNote) => set({ selectedNote }),
-  setBrushType: (brushType) => set({ brushType }),
-  setRootKey: (rootKey) => set({ rootKey }),
-  setScale: (scale) => set({ scale }),
-  toggleMute: () => set((s) => ({ muted: !s.muted })),
-  setConsonanceThreshold: (consonanceThreshold) => set({ consonanceThreshold }),
-  setTickIntervalMs: (tickIntervalMs) => set({ tickIntervalMs }),
-  setReverbMix: (reverbMix) => set({ reverbMix }),
-  setCellGlow: (cellGlow) => set({ cellGlow }),
-  setHarmonicConnections: (harmonicConnections) => set({ harmonicConnections }),
-  setParticleEffects: (particleEffects) => set({ particleEffects }),
-  toggleSilenceBomb: () => set((s) => ({ silenceBombActive: !s.silenceBombActive })),
-  applyPreset: (preset) => {
-    const presets = {
-      'slow-ambient': { tickIntervalMs: 600, reverbMix: 0.7, consonanceThreshold: 0.3 },
-      'medium-flow': { tickIntervalMs: 300, reverbMix: 0.4, consonanceThreshold: 0.5 },
-      'upbeat-pulse': { tickIntervalMs: 150, reverbMix: 0.2, consonanceThreshold: 0.7 },
+  step: () => set((s) => ({ grid: stepConway(s.grid, s.gridSize) })),
+  setPlayhead: (playhead) => set({ playhead }),
+  setBar: (bar) => set({ bar }),
+  setPlaying: (playing) => set({ playing }),
+  clear: () => set((s) => ({ grid: clearGrid(s.gridSize), playhead: 0, bar: 0 })),
+  loadPattern: (name) => set((s) => {
+    const idx = name ? PATTERN_ORDER.indexOf(name) : s.patternIndex
+    const pickName = name ?? PATTERN_ORDER[s.patternIndex]
+    return {
+      grid: stampPattern(pickName, s.gridSize),
+      playhead: 0,
+      bar: 0,
+      patternIndex: Math.max(0, idx),
     }
-    set(presets[preset])
-  },
-  reset: () => set({
-    grid: createGrid(CONFIG.GRID_SIZE),
-    conductor: createConductor(),
-    playback: 'setup',
-    tick: 0,
   }),
+  cyclePattern: () => {
+    const next = (get().patternIndex + 1) % PATTERN_ORDER.length
+    set({
+      grid: stampPattern(PATTERN_ORDER[next], get().gridSize),
+      playhead: 0,
+      bar: 0,
+      patternIndex: next,
+    })
+  },
 })))
+
+export { PATTERN_ORDER }

@@ -1,54 +1,77 @@
 // src/audio/synth.ts
+// Two voices: a warm "kalimba" for cells and a soft bass for the hidden chord cycle.
+// Both share one reverb so the mix breathes together. Pentatonic-only input means
+// no amount of cell density can produce dissonance.
+
 import * as Tone from 'tone'
 import { midiToNoteName } from '@/engine/cell'
 
-let synth: Tone.PolySynth | null = null
+let kalimba: Tone.PolySynth | null = null
+let bass: Tone.MonoSynth | null = null
 let reverb: Tone.Reverb | null = null
-let delay: Tone.FeedbackDelay | null = null
+let ready = false
 
 export async function initAudio(): Promise<void> {
+  if (ready) return
   await Tone.start()
 
-  reverb = new Tone.Reverb({ decay: 4, wet: 0.4 }).toDestination()
-  delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.2, wet: 0.15 }).connect(reverb)
+  reverb = new Tone.Reverb({ decay: 4, wet: 0.35, preDelay: 0.02 }).toDestination()
+  await reverb.generate()
 
-  synth = new Tone.PolySynth(Tone.Synth, {
+  kalimba = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.005, decay: 0.4, sustain: 0.0, release: 1.2 },
+    volume: -10,
+  })
+  kalimba.maxPolyphony = 16
+  kalimba.connect(reverb)
+
+  bass = new Tone.MonoSynth({
     oscillator: { type: 'sine' },
-    envelope: {
-      attack: 0.3,
-      decay: 0.5,
-      sustain: 0.6,
-      release: 1.5,
-    },
-    volume: -12,
-  }).connect(delay)
+    envelope: { attack: 0.05, decay: 0.4, sustain: 0.6, release: 1.4 },
+    filterEnvelope: { attack: 0.05, decay: 0.3, sustain: 0.4, release: 1, baseFrequency: 120, octaves: 2 },
+    volume: -14,
+  })
+  bass.connect(reverb)
+
+  Tone.getTransport().bpm.value = 110
+  ready = true
 }
 
-export function triggerNotes(notes: { midi: number; volume: number }[]): void {
-  if (!synth) return
-
-  const now = Tone.now()
-  for (const { midi, volume } of notes) {
+export function playColumn(midiNotes: number[], time: number): void {
+  if (!kalimba) return
+  // Light velocity variation so it doesn't feel robotic.
+  for (const midi of midiNotes) {
     const name = midiToNoteName(midi)
-    const velocity = Math.max(0.01, Math.min(1, volume * 0.3))
-    synth.triggerAttackRelease(name, '4n', now, velocity)
+    const velocity = 0.45 + Math.random() * 0.25
+    try {
+      kalimba.triggerAttackRelease(name, '8n', time, velocity)
+    } catch {
+      // ignore overlapping-trigger races
+    }
   }
 }
 
-export function updateEffects(density: number): void {
-  if (reverb) {
-    reverb.wet.value = Math.min(0.8, 0.2 + (1 - density) * 0.6)
-  }
-  if (delay) {
-    delay.wet.value = Math.min(0.4, 0.05 + (1 - density) * 0.35)
+export function playBass(midi: number, time: number): void {
+  if (!bass) return
+  const name = midiToNoteName(midi)
+  try {
+    bass.triggerAttackRelease(name, '2n', time, 0.7)
+  } catch {
+    // ignore
   }
 }
 
 export function disposeAudio(): void {
-  synth?.dispose()
+  kalimba?.dispose()
+  bass?.dispose()
   reverb?.dispose()
-  delay?.dispose()
-  synth = null
+  kalimba = null
+  bass = null
   reverb = null
-  delay = null
+  ready = false
+}
+
+export function isReady(): boolean {
+  return ready
 }

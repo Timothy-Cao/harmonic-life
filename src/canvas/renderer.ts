@@ -1,13 +1,10 @@
 // src/canvas/renderer.ts
-import { Grid, getCell } from '@/engine/grid'
-import { getMidiNote } from '@/engine/cell'
-import { getInterval, intervalScore } from '@/engine/harmony'
+// Boolean Conway grid + a glowing vertical playhead that sweeps left→right.
+// Cells in the playhead column glow brighter for the half-beat they're being played.
 
-const BG_COLOR = '#0a0a0f'
+import { Grid } from '@/engine/grid'
 
-function noteToHue(midi: number): number {
-  return (getMidiNote(midi) % 12) * 30
-}
+const BG = '#0a0a14'
 
 export function drawGrid(
   ctx: CanvasRenderingContext2D,
@@ -15,98 +12,56 @@ export function drawGrid(
   gridSize: number,
   canvasWidth: number,
   canvasHeight: number,
+  playhead: number,
 ) {
   const cellW = canvasWidth / gridSize
   const cellH = canvasHeight / gridSize
 
-  // Clear
-  ctx.fillStyle = BG_COLOR
+  ctx.fillStyle = BG
   ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
-  // Draw grid lines (very faint)
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)'
-  ctx.lineWidth = 0.5
-  for (let i = 0; i <= gridSize; i++) {
-    ctx.beginPath()
-    ctx.moveTo(i * cellW, 0)
-    ctx.lineTo(i * cellW, canvasHeight)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.moveTo(0, i * cellH)
-    ctx.lineTo(canvasWidth, i * cellH)
-    ctx.stroke()
-  }
+  // Playhead column shaded behind the cells
+  ctx.fillStyle = 'rgba(120, 200, 255, 0.10)'
+  ctx.fillRect(playhead * cellW, 0, cellW, canvasHeight)
 
-  // Draw cells
+  // Cells
   for (let y = 0; y < gridSize; y++) {
     for (let x = 0; x < gridSize; x++) {
-      const cell = getCell(grid, gridSize, x, y)
-      if (!cell) continue
-
+      if (!grid[y * gridSize + x]) continue
       const cx = x * cellW + cellW / 2
       const cy = y * cellH + cellH / 2
-      const radius = (cellW / 2 - 1) * Math.max(0.3, cell.energy)
-      const hue = noteToHue(cell.note)
-      const lightness = 40 + cell.energy * 30
+      const inPlayhead = x === playhead
 
-      // Glow effect: radial gradient around the cell
-      const glowRadius = radius * (1.5 + cell.energy * 1.5)
-      const glow = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, glowRadius)
-      glow.addColorStop(0, `hsla(${hue}, 80%, 60%, ${0.3 * cell.energy})`)
-      glow.addColorStop(1, `hsla(${hue}, 80%, 60%, 0)`)
-      ctx.fillStyle = glow
+      const r = (cellW / 2 - 1) * (inPlayhead ? 1.05 : 0.78)
+      // Hue: top of grid = warm/yellow (high notes), bottom = cool/violet (low notes)
+      const hue = 60 + (y / gridSize) * 240
+      ctx.fillStyle = inPlayhead
+        ? `hsl(${hue}, 90%, 72%)`
+        : `hsl(${hue}, 60%, 55%)`
       ctx.beginPath()
-      ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2)
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
       ctx.fill()
 
-      // Base cell circle
-      ctx.fillStyle = `hsl(${hue}, 80%, ${lightness}%)`
-      ctx.beginPath()
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  }
-
-  // Draw harmonic connection lines between consonant neighbors
-  const neighborOffsets: [number, number][] = [
-    [1, 0],   // right
-    [1, 1],   // bottom-right
-    [0, 1],   // bottom
-    [-1, 1],  // bottom-left
-  ]
-
-  for (let y = 0; y < gridSize; y++) {
-    for (let x = 0; x < gridSize; x++) {
-      const cellA = getCell(grid, gridSize, x, y)
-      if (!cellA) continue
-
-      const cxA = x * cellW + cellW / 2
-      const cyA = y * cellH + cellH / 2
-
-      for (const [dx, dy] of neighborOffsets) {
-        const nx = x + dx
-        const ny = y + dy
-        if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) continue
-
-        const cellB = getCell(grid, gridSize, nx, ny)
-        if (!cellB) continue
-
-        const interval = getInterval(cellA.note, cellB.note)
-        const score = intervalScore(interval)
-        if (score <= 0.3) continue
-
-        const cxB = nx * cellW + cellW / 2
-        const cyB = ny * cellH + cellH / 2
-
-        ctx.strokeStyle = `rgba(255,255,255,${score * 0.15})`
-        ctx.lineWidth = 1
+      if (inPlayhead) {
+        // soft glow on the active column
+        const glow = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3)
+        glow.addColorStop(0, `hsla(${hue}, 90%, 70%, 0.45)`)
+        glow.addColorStop(1, `hsla(${hue}, 90%, 70%, 0)`)
+        ctx.fillStyle = glow
         ctx.beginPath()
-        ctx.moveTo(cxA, cyA)
-        ctx.lineTo(cxB, cyB)
-        ctx.stroke()
+        ctx.arc(cx, cy, r * 3, 0, Math.PI * 2)
+        ctx.fill()
       }
     }
   }
+
+  // Bright vertical playhead line
+  ctx.strokeStyle = 'rgba(180, 220, 255, 0.6)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(playhead * cellW + cellW / 2, 0)
+  ctx.lineTo(playhead * cellW + cellW / 2, canvasHeight)
+  ctx.stroke()
 }
 
 export function canvasToGrid(

@@ -1,36 +1,24 @@
 import { describe, it, expect } from 'vitest'
-import { getScaleNotes, findChordCompletion, SCALES } from '../music'
+import { rowToMidi, bassNoteForBar, PENTATONIC } from '@/engine/music'
 
-describe('getScaleNotes', () => {
-  it('returns C major pentatonic notes', () => {
-    const notes = getScaleNotes(0, 'pentatonic') // C pentatonic
-    expect(notes).toEqual([0, 2, 4, 7, 9])
+describe('music mapping', () => {
+  it('row 0 is higher than the bottom row', () => {
+    const top = rowToMidi(0, 32, 0)
+    const bottom = rowToMidi(31, 32, 0)
+    expect(top).toBeGreaterThan(bottom)
   })
 
-  it('returns D major scale notes', () => {
-    const notes = getScaleNotes(2, 'major') // D major
-    expect(notes).toEqual([2, 4, 6, 7, 9, 11, 1])
-  })
-})
-
-describe('findChordCompletion', () => {
-  it('completes C major triad from C and E → G', () => {
-    const result = findChordCompletion([0, 4], getScaleNotes(0, 'major'))
-    expect(result).toContain(7) // G completes C-E-G
+  it('every rowToMidi result lies on the pentatonic scale', () => {
+    for (let r = 0; r < 32; r++) {
+      const midi = rowToMidi(r, 32, 0)
+      const pc = ((midi % 12) + 12) % 12
+      expect(PENTATONIC).toContain(pc)
+    }
   })
 
-  it('completes A minor triad from A and C → E', () => {
-    const result = findChordCompletion([9, 0], getScaleNotes(0, 'major'))
-    expect(result).toContain(4) // E completes A-C-E
-  })
-
-  it('returns empty when no completion fits scale', () => {
-    const result = findChordCompletion([1, 5], getScaleNotes(0, 'pentatonic'))
-    expect(Array.isArray(result)).toBe(true)
-  })
-
-  it('returns empty for single note', () => {
-    const result = findChordCompletion([0], getScaleNotes(0, 'major'))
-    expect(result).toEqual([])
+  it('bass progression cycles through 4 bars', () => {
+    const notes = [0, 1, 2, 3].map(b => bassNoteForBar(b, 0))
+    expect(new Set(notes).size).toBeGreaterThan(1)
+    expect(bassNoteForBar(4, 0)).toBe(bassNoteForBar(0, 0))
   })
 })

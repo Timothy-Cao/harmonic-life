@@ -1,51 +1,36 @@
-// src/engine/__tests__/grid.test.ts
 import { describe, it, expect } from 'vitest'
-import { createGrid, getCell, setCell, getNeighbors, gridDensity } from '../grid'
-import { createCell } from '../cell'
+import { createGrid, setCell, stepConway, countAlive, getCell } from '@/engine/grid'
 
-describe('createGrid', () => {
-  it('creates a grid of given size filled with null', () => {
-    const grid = createGrid(4)
-    expect(grid.length).toBe(16)
-    expect(grid.every(c => c === null)).toBe(true)
-  })
-})
+describe('Conway grid', () => {
+  it('a blinker oscillates between vertical and horizontal', () => {
+    const size = 5
+    let g = createGrid(size)
+    // horizontal blinker in the middle
+    g = setCell(g, size, 1, 2, 1)
+    g = setCell(g, size, 2, 2, 1)
+    g = setCell(g, size, 3, 2, 1)
 
-describe('getCell / setCell', () => {
-  it('sets and gets a cell by x,y', () => {
-    const grid = createGrid(4)
-    const cell = createCell(60)
-    const next = setCell(grid, 4, 1, 2, cell)
-    expect(getCell(next, 4, 1, 2)).toEqual(cell)
-  })
+    const next = stepConway(g, size)
+    expect(getCell(next, size, 2, 1)).toBe(1)
+    expect(getCell(next, size, 2, 2)).toBe(1)
+    expect(getCell(next, size, 2, 3)).toBe(1)
+    expect(countAlive(next)).toBe(3)
 
-  it('returns null for out-of-bounds', () => {
-    const grid = createGrid(4)
-    expect(getCell(grid, 4, -1, 0)).toBeNull()
-    expect(getCell(grid, 4, 4, 0)).toBeNull()
-  })
-})
-
-describe('getNeighbors', () => {
-  it('returns up to 8 neighbors for interior cell', () => {
-    const grid = createGrid(4)
-    const withCell = setCell(grid, 4, 1, 0, createCell(60))
-    const neighbors = getNeighbors(withCell, 4, 1, 1)
-    // (1,0) is a neighbor of (1,1)
-    expect(neighbors.length).toBe(1)
-    expect(neighbors[0].note).toBe(60)
-  })
-})
-
-describe('gridDensity', () => {
-  it('returns 0 for empty grid', () => {
-    expect(gridDensity(createGrid(4), 4)).toBe(0)
+    const back = stepConway(next, size)
+    // back to horizontal
+    expect(getCell(back, size, 1, 2)).toBe(1)
+    expect(getCell(back, size, 2, 2)).toBe(1)
+    expect(getCell(back, size, 3, 2)).toBe(1)
   })
 
-  it('returns correct density', () => {
-    let grid = createGrid(4)
-    grid = setCell(grid, 4, 0, 0, createCell(60))
-    grid = setCell(grid, 4, 1, 1, createCell(64))
-    expect(gridDensity(grid, 4)).toBeCloseTo(2 / 16)
+  it('a block is stable', () => {
+    const size = 4
+    let g = createGrid(size)
+    g = setCell(g, size, 1, 1, 1)
+    g = setCell(g, size, 2, 1, 1)
+    g = setCell(g, size, 1, 2, 1)
+    g = setCell(g, size, 2, 2, 1)
+    const next = stepConway(g, size)
+    expect(Array.from(next)).toEqual(Array.from(g))
   })
 })
