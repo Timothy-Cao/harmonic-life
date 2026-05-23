@@ -5,6 +5,8 @@ import { useStore } from '@/store/store'
 import { drawGrid, canvasToGrid } from '@/canvas/renderer'
 import { useSimulation } from '@/hooks/useSimulation'
 import ControlPanel from '@/ui/ControlPanel'
+import { isReady, playInstant } from '@/audio/synth'
+import { rowToChordTone } from '@/audio/song'
 
 const CANVAS_SIZE = 640
 
@@ -44,6 +46,13 @@ export default function Home() {
     )
     if (!pos) return
     toggle(pos.x, pos.y)
+    // Instant audio feedback: play a chord-tone note for the row they clicked.
+    // Even before the transport starts, clicking should feel musical.
+    if (isReady()) {
+      const step = useStore.getState().playhead * 1
+      const midi = rowToChordTone(pos.y, gridSize, step)
+      playInstant(midi)
+    }
   }, [gridSize, toggle])
 
   const beginSession = useCallback(async () => {
@@ -84,7 +93,7 @@ export default function Home() {
       </div>
 
       <p className="text-xs text-white/40 max-w-md text-center leading-relaxed">
-        Click any cell to bring it to life. Watch them grow, dance, and die — every living cell sings a note as the playhead sweeps across.
+        Tap cells to wake them up. They&apos;ll dance to the song, sprinkling notes wherever they live.
       </p>
     </main>
   )

@@ -1,7 +1,7 @@
 // src/hooks/useSimulation.ts
-// Drives the sequencer: every 16th note, advance the playhead, fire notes for the
-// new column, and (every CONWAY_STEPS_PER_TICK steps) advance Conway. Bass plays
-// on the downbeat of each bar using a fixed pentatonic-friendly progression.
+// Drives the song: on every 16th note, schedule the right voices.
+// Cells alive in the playhead column trigger *ornament* notes from the current
+// chord — they can't ruin the song, only decorate it.
 
 'use client'
 
@@ -9,9 +9,21 @@ import { useCallback, useEffect, useRef } from 'react'
 import * as Tone from 'tone'
 import { useStore } from '@/store/store'
 import { CONFIG } from '@/engine/config'
-import { rowToMidi, bassNoteForBar } from '@/engine/music'
-import { initAudio, playColumn, playBass } from '@/audio/synth'
 import { stepConway } from '@/engine/grid'
+import {
+  initAudio,
+  playPad,
+  playBass,
+  playArp,
+  playLead,
+  playOrnament,
+} from '@/audio/synth'
+import {
+  chordAtStep,
+  leadNoteAtStep,
+  arpNoteAtStep,
+  rowToChordTone,
+} from '@/audio/song'
 
 export function useSimulation() {
   const repeatIdRef = useRef<number | null>(null)
@@ -22,41 +34,54 @@ export function useSimulation() {
     const transport = Tone.getTransport()
 
     if (repeatIdRef.current === null) {
+      stepCounterRef.current = 0
       repeatIdRef.current = transport.scheduleRepeat((time: number) => {
         const state = useStore.getState()
         const { grid, gridSize } = state
-        const col = state.playhead
+        const step = stepCounterRef.current
+        const posInBar = step % 16
 
-        // Collect alive rows in the current column → pentatonic-mapped MIDI notes
+        // --- Backing song layer (deterministic, always plays) ---
+        const chord = chordAtStep(step)
+
+        // Pad: hit at the start of every bar, sustains
+        if (posInBar === 0) {
+          playPad(chord.pad, time, '1m')
+          playBass(chord.bass, time, '1m')
+          state.setBar(Math.floor(step / 16))
+        }
+
+        // Arpeggio on every 8th
+        const arpNote = arpNoteAtStep(step)
+        if (arpNote !== null) playArp(arpNote, time)
+
+        // Lead melody (hand-composed)
+        const leadNote = leadNoteAtStep(step)
+        if (leadNote !== null) playLead(leadNote, time, '4n')
+
+        // --- User ornament layer (driven by Conway grid) ---
+        // Pick alive cells in the current playhead column → chord-tone notes.
+        const col = state.playhead
         const aliveRows: number[] = []
         for (let y = 0; y < gridSize; y++) {
           if (grid[y * gridSize + col]) aliveRows.push(y)
         }
-        // Cap polyphony: take the top, the bottom, and pick a couple from the middle.
-        // Simpler: just take the first N from a deterministic stride so columns sound consistent.
-        const picks = aliveRows.length <= CONFIG.MAX_NOTES_PER_COLUMN
-          ? aliveRows
-          : pickEvenly(aliveRows, CONFIG.MAX_NOTES_PER_COLUMN)
-
-        const notes = picks.map(y => rowToMidi(y, gridSize, CONFIG.ROOT_KEY))
-        if (notes.length > 0) playColumn(notes, time)
-
-        // Bass: downbeat of each bar (every 16 steps)
-        if (stepCounterRef.current % 16 === 0) {
-          const bar = Math.floor(stepCounterRef.current / 16)
-          playBass(bassNoteForBar(bar, CONFIG.ROOT_KEY), time)
-          state.setBar(bar)
+        if (aliveRows.length > 0) {
+          const picks = aliveRows.length <= CONFIG.MAX_NOTES_PER_COLUMN
+            ? aliveRows
+            : pickEvenly(aliveRows, CONFIG.MAX_NOTES_PER_COLUMN)
+          const ornaments = picks.map(y => rowToChordTone(y, gridSize, step))
+          playOrnament(ornaments, time)
         }
 
-        // Conway step
-        stepCounterRef.current++
-        if (stepCounterRef.current % CONFIG.CONWAY_STEPS_PER_TICK === 0) {
+        // Conway advance once per beat
+        stepCounterRef.current = step + 1
+        if ((step + 1) % CONFIG.CONWAY_STEPS_PER_TICK === 0) {
           state.setGrid(stepConway(grid, gridSize))
         }
 
-        // Advance playhead
-        const nextCol = (col + 1) % gridSize
-        state.setPlayhead(nextCol)
+        // Advance visual playhead
+        state.setPlayhead((col + 1) % gridSize)
       }, '16n')
     }
 
