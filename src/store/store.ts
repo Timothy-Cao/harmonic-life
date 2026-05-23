@@ -1,7 +1,7 @@
 // src/store/store.ts
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import { Grid, seedGarden } from '@/engine/grid'
+import { Grid, createGrid } from '@/engine/grid'
 import { ConductorState, createConductor } from '@/engine/conductor'
 import { CONFIG } from '@/engine/config'
 
@@ -59,7 +59,7 @@ type Store = {
 }
 
 export const useStore = create<Store>()(subscribeWithSelector((set) => ({
-  grid: seedGarden(CONFIG.GRID_SIZE, 0),
+  grid: createGrid(CONFIG.GRID_SIZE),
   gridSize: CONFIG.GRID_SIZE,
   conductor: createConductor(),
   playback: 'setup',
@@ -112,10 +112,10 @@ export const useStore = create<Store>()(subscribeWithSelector((set) => ({
     }
     set(presets[preset])
   },
-  reset: () => set((s) => ({
-    grid: seedGarden(CONFIG.GRID_SIZE, s.rootKey),
-    conductor: createConductor(s.rootKey, s.scale),
+  reset: () => set({
+    grid: createGrid(CONFIG.GRID_SIZE),
+    conductor: createConductor(),
     playback: 'setup',
     tick: 0,
-  })),
+  }),
 })))

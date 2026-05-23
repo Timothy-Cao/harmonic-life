@@ -3,11 +3,11 @@ import { Grid, getCell } from '@/engine/grid'
 import { getMidiNote } from '@/engine/cell'
 import { getInterval, intervalScore } from '@/engine/harmony'
 
+const BG_COLOR = '#0a0a0f'
+
 function noteToHue(midi: number): number {
   return (getMidiNote(midi) % 12) * 30
 }
-
-let breathPhase = 0
 
 export function drawGrid(
   ctx: CanvasRenderingContext2D,
@@ -19,21 +19,23 @@ export function drawGrid(
   const cellW = canvasWidth / gridSize
   const cellH = canvasHeight / gridSize
 
-  breathPhase += 0.012
-  const breath = 0.5 + 0.5 * Math.sin(breathPhase)
-
-  // Trail fade: semi-transparent overlay instead of full clear, so cells leave soft ghosts.
-  // Radial gradient gives a subtle aurora atmosphere.
-  const bg = ctx.createRadialGradient(
-    canvasWidth / 2, canvasHeight / 2, 0,
-    canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.75,
-  )
-  bg.addColorStop(0, 'rgba(18, 14, 36, 0.18)')
-  bg.addColorStop(1, 'rgba(6, 6, 14, 0.28)')
-  ctx.fillStyle = bg
+  // Clear
+  ctx.fillStyle = BG_COLOR
   ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
-  // grid lines intentionally omitted — trail fade does the spatial work, less clinical
+  // Draw grid lines (very faint)
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)'
+  ctx.lineWidth = 0.5
+  for (let i = 0; i <= gridSize; i++) {
+    ctx.beginPath()
+    ctx.moveTo(i * cellW, 0)
+    ctx.lineTo(i * cellW, canvasHeight)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(0, i * cellH)
+    ctx.lineTo(canvasWidth, i * cellH)
+    ctx.stroke()
+  }
 
   // Draw cells
   for (let y = 0; y < gridSize; y++) {
@@ -43,7 +45,7 @@ export function drawGrid(
 
       const cx = x * cellW + cellW / 2
       const cy = y * cellH + cellH / 2
-      const radius = (cellW / 2 - 1) * Math.max(0.3, cell.energy) * (0.92 + breath * 0.12)
+      const radius = (cellW / 2 - 1) * Math.max(0.3, cell.energy)
       const hue = noteToHue(cell.note)
       const lightness = 40 + cell.energy * 30
 
