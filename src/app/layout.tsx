@@ -27,7 +27,16 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <nav
+          aria-label="Legal links"
+          className="fixed bottom-2 right-3 z-[1000] flex gap-2 rounded bg-black/40 px-2 py-1 text-[11px] text-white/60 backdrop-blur-sm"
+        >
+          <a className="hover:text-white" href="/privacy">Privacy</a>
+          <a className="hover:text-white" href="mailto:timcao.support@gmail.com">Contact</a>
+        </nav>
+      </body>
     </html>
   );
 }
